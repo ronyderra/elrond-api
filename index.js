@@ -67,8 +67,6 @@ const smartContractResults1 = async (dataArray) => {
       }
 
       if (resData.data.data.transaction.returnMessage === "sending value to non payable contract") {
-        console.log("hash:", item.txHash);
-        console.log(resData.data.data.transaction.originalTransactionHash);
 
         if (!resData.data.data.transaction.originalTransactionHash) {
           const newobj = {
@@ -86,8 +84,7 @@ const smartContractResults1 = async (dataArray) => {
           continue;
         }
 
-        const nftName =
-          (await scrape(resData.data.data.transaction.originalTransactionHash)) || "not found";
+        const nftName =(await scrape(resData.data.data.transaction.originalTransactionHash)) || "not found";
 
         const newobj = {
           value: resData.data.data.transaction.value,
@@ -99,7 +96,6 @@ const smartContractResults1 = async (dataArray) => {
           originalTransactionHash: resData.data.data.transaction.originalTransactionHash,
           nftName,
         };
-        console.log(newobj);
         data.push(newobj);
         continue;
       }
