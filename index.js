@@ -1,28 +1,9 @@
 const axios = require("axios");
 const axiosRetry = require("axios-retry");
-// import { TransactionDecoder, TransactionMetadata } from "@elrondnetwork/transaction-decoder";
-// import { Base64 } from "js-base64";
-// const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-const createCsvWriter = require("csv-writer").createObjectCsvWriter;
 const reader = require("xlsx");
 const file = reader.readFile("./elrond.xlsx");
 const puppeteer = require("puppeteer");
 const cheerio = require("cheerio");
-
-// import { ProxyNetworkProvider } from "@elrondnetwork/erdjs-network-providers";
-
-// const csvWriter = createCsvWriter.createArrayCsvWriter({
-//   path: "./transactions.csv",
-//   header: [
-//     { id: "value", title: "Value" },
-//     { id: "receiver", title: "Receiver" },
-//     { id: "sender", title: "Sender" },
-//     { id: "error", title: "Error" },
-//     { id: "hash", title: "Hash" },
-//     { id: "originalSender", title: "OriginalSender" },
-//     { id: "timestamp", title: "Timestamp" },
-//   ],
-// });
 
 axiosRetry(axios, {
   retries: 3, // number of retries
@@ -85,14 +66,8 @@ const smartContractResults1 = async (dataArray) => {
         continue;
       }
 
-      //   const smartContractResults = resData.data.data.transaction.smartContractResults
-      //     ? resData.data.data.transaction.smartContractResults
-      //     : undefined;
-      //   console.log(smartContractResults);
-      //   console.log(typeof(smartContractResults))
-
       if (resData.data.data.transaction.returnMessage === "sending value to non payable contract") {
-        console.log("hash:" , item.txHash)
+        console.log("hash:", item.txHash);
         console.log(resData.data.data.transaction.originalTransactionHash);
 
         if (!resData.data.data.transaction.originalTransactionHash) {
@@ -104,14 +79,15 @@ const smartContractResults1 = async (dataArray) => {
             hash: item.txHash,
             originalSender: resData.data.data.transaction.originalSender,
             originalTransactionHash: "not found",
-            nftName : "not found" ,
+            nftName: "not found",
           };
           data.push(newobj);
-          console.log("_----------------notFound------" , item.txHash)
+          console.log("_----------------notFound------", item.txHash);
           continue;
         }
 
-        const nftName = await scrape(resData.data.data.transaction.originalTransactionHash)  || "not found"  ;
+        const nftName =
+          (await scrape(resData.data.data.transaction.originalTransactionHash)) || "not found";
 
         const newobj = {
           value: resData.data.data.transaction.value,
@@ -120,44 +96,56 @@ const smartContractResults1 = async (dataArray) => {
           error: "sending value to non payable contract",
           hash: item.txHash,
           originalSender: resData.data.data.transaction.originalSender,
-          originalTransactionHash:resData.data.data.transaction.originalTransactionHash,
-          nftName ,
+          originalTransactionHash: resData.data.data.transaction.originalTransactionHash,
+          nftName,
         };
         console.log(newobj);
         data.push(newobj);
         continue;
       }
-
-      //   if (smartContractResults) {
-      //     // console.log(item.txHash, smartContractResults.length);
-      //     for (let i = 0; i < smartContractResults.length; i++) {
-      //       const k = smartContractResults[i];
-      //       if (
-      //         k["returnMessage"] !== undefined &&
-      //         k["returnMessage"] === "sending value to non payable contract"
-      //       ) {
-      //         const newobj = {
-      //           value: resData.data.data.transaction.value,
-      //           contractAddress: resData.data.data.transaction.logs.address,
-      //           error: "sending value to non payable contract",
-      //           hash: item.txHash,
-      //         };
-      //         console.log(newobj);
-      //         continue;
-      //       }
-      //     }
-      //   }
     }
     console.log("data____________", data);
 
     const ws = reader.utils.json_to_sheet(data);
-    // console.log(ws)
     reader.utils.book_append_sheet(file, ws, "Sheet30");
     reader.writeFile(file, "./elrond.xlsx");
   } catch (err) {
     console.log(err.message);
   }
 };
+
+const scrape = async (hash) => {
+  try {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto(`https://explorer.elrond.com/transactions/${hash}`);
+    await page.waitForSelector(".tab-content");
+    const newwholePage = await page.evaluate(
+      () => document.querySelector(".tab-content").innerHTML
+    );
+    const $ = await cheerio.load(newwholePage, null, false);
+    const listItems = $("a");
+    const arr = [];
+    listItems.each(function (idx, el) {
+      const name = $(el).children("div").children("span").text();
+      if (name) {
+        arr.push(name);
+        console.log(name);
+      }
+    });
+    return arr[0];
+  } catch (err) {
+    return;
+  }
+};
+
+(async () => {
+  const res = await getData();
+})();
+
+// import { TransactionDecoder, TransactionMetadata } from "@elrondnetwork/transaction-decoder";
+// import { Base64 } from "js-base64";
+// const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 // const decode = async () => {
 //   try {
@@ -191,31 +179,28 @@ const smartContractResults1 = async (dataArray) => {
 //   }
 // };
 
-const scrape = async (hash) => {
-  try {
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
-    await page.goto(`https://explorer.elrond.com/transactions/${hash}`);
-    await page.waitForSelector(".tab-content");
-    const newwholePage = await page.evaluate(
-      () => document.querySelector(".tab-content").innerHTML
-    );
-    const $ = await cheerio.load(newwholePage, null, false);
-    const listItems = $("a");
-    const arr = [];
-    listItems.each(function (idx, el) {
-      const name = $(el).children("div").children("span").text();
-      if (name) {
-        arr.push(name);
-        console.log(name);
-      }
-    });
-    return arr[0];
-  } catch (err) {
-    return;
-  }
-};
+//   const smartContractResults = resData.data.data.transaction.smartContractResults
+//     ? resData.data.data.transaction.smartContractResults
+//     : undefined;
+//   console.log(smartContractResults);
+//   console.log(typeof(smartContractResults))
 
-(async () => {
-  const res = await getData();
-})();
+//   if (smartContractResults) {
+//     // console.log(item.txHash, smartContractResults.length);
+//     for (let i = 0; i < smartContractResults.length; i++) {
+//       const k = smartContractResults[i];
+//       if (
+//         k["returnMessage"] !== undefined &&
+//         k["returnMessage"] === "sending value to non payable contract"
+//       ) {
+//         const newobj = {
+//           value: resData.data.data.transaction.value,
+//           contractAddress: resData.data.data.transaction.logs.address,
+//           error: "sending value to non payable contract",
+//           hash: item.txHash,
+//         };
+//         console.log(newobj);
+//         continue;
+//       }
+//     }
+//   }
