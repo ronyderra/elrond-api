@@ -1,9 +1,11 @@
 const axios = require("axios");
 const axiosRetry = require("axios-retry");
 const reader = require("xlsx");
-const file = reader.readFile("./elrond.xlsx");
+const file = reader.readFile("./newElrond.xlsx");
 const puppeteer = require("puppeteer");
 const cheerio = require("cheerio");
+// var BigNumber = require("big-number");
+const { ethers, BigNumber } = require("ethers");
 
 axiosRetry(axios, {
   retries: 3, // number of retries
@@ -58,53 +60,140 @@ const smartContractResults1 = async (dataArray) => {
   try {
     let data = [];
     for await (const item of dataArray) {
+      const hashToCall = item.originalTxHash ? item.originalTxHash : item.txHash;
+
+      let existInData = false;
+
+      for (let z = 0; z < data.length; z++) {
+        const hashInArray = data[z].mainHash;
+        if (hashInArray === hashToCall) {
+          console.log("exists!!!", hashToCall);
+          existInData = true;
+          break;
+        }
+      }
+
+      if (existInData) {
+        continue;
+      }
+
       let resData = await axios
-        .get(`https://api.elrond.com/transaction/${item.txHash}?withResults=true`)
+        .get(`https://api.elrond.com/transaction/${hashToCall}?withResults=true`)
         .catch((e) => "got failed");
 
       if (resData === "got failed") {
+        console.log("failed", hashToCall);
+        continue;
+      }
+      if (resData.data.data.transaction.value == 0) {
+        console.log("value is zero:", hashToCall);
+        continue;
+      }
+      if (!resData.data.data.transaction.smartContractResults) {
+        console.log("there is no smartContractResults :",hashToCall);
         continue;
       }
 
-      if (resData.data.data.transaction.returnMessage === "sending value to non payable contract") {
+      const smartContractResults = resData.data.data.transaction.smartContractResults;
+      const mainHashValue = resData.data.data.transaction.value;
 
-        if (!resData.data.data.transaction.originalTransactionHash) {
-          const newobj = {
-            value: resData.data.data.transaction.value,
-            receiver: resData.data.data.transaction.receiver,
-            sender: resData.data.data.transaction.sender,
-            error: "sending value to non payable contract",
-            hash: item.txHash,
-            originalSender: resData.data.data.transaction.originalSender,
-            originalTransactionHash: "not found",
-            nftName: "not found",
-          };
-          data.push(newobj);
-          console.log("_----------------notFound------", item.txHash);
-          continue;
+      console.log(hashToCall);
+ 
+      let isValidSmartContractResults = true;
+
+      for (let t = 0; t < smartContractResults.length; t++) {
+        if (Object.keys(smartContractResults[t]).indexOf("returnMessage") === 11) {
+          console.log("returnMessage:" + " " + smartContractResults[t].returnMessage + " " +  smartContractResults[t].hash);
+          isValidSmartContractResults = false;
+          break;
         }
-
-        const nftName =(await scrape(resData.data.data.transaction.originalTransactionHash)) || "not found";
-
-        const newobj = {
-          value: resData.data.data.transaction.value,
-          receiver: resData.data.data.transaction.receiver,
-          sender: resData.data.data.transaction.sender,
-          error: "sending value to non payable contract",
-          hash: item.txHash,
-          originalSender: resData.data.data.transaction.originalSender,
-          originalTransactionHash: resData.data.data.transaction.originalTransactionHash,
-          nftName,
-        };
-        data.push(newobj);
-        continue;
       }
+
+      if (isValidSmartContractResults) {
+        for (let i = 0; i < smartContractResults.length; i++) {
+          if (
+            smartContractResults[i].receiver ===
+            "erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8"
+          ) {
+            const internalHashValue = smartContractResults[i].value;
+
+            const tenPercentOfMainValue = (mainHashValue / 100) * 10;
+
+            const isAroyaltyHash = internalHashValue == tenPercentOfMainValue ? true : false;
+
+            if (isAroyaltyHash) {
+              const nftName = (await scrape(hashToCall)) || "not found";
+
+              const newobj = {
+                royaltyValue: internalHashValue,
+                mainValue: mainHashValue,
+                internalHash: smartContractResults[i].hash,
+                mainHash: hashToCall,
+                nftName,
+              };
+              data.push(newobj);
+              console.log(newobj);
+            }
+          }
+        }
+      }
+
+      // const royaltyTransaction = smartContractResults[smartContractResults.length - 1];
+      // console.log(royaltyTransaction)
+
+      // if (royaltyTransaction["returnMessage"] === undefined) {
+      //   const nftName = (await scrape(item.txHash)) || "not found";
+      //   const newobj = {
+      //     valueEgld: royaltyTransaction.value,
+      //     receiver: royaltyTransaction.receiver,
+      //     sender: royaltyTransaction.sender,
+      //     hash: royaltyTransaction.hash,
+      //     originalTransactionHash: royaltyTransaction.originalTxHash,
+      //     nftName,
+      //   };
+      //   data.push(newobj);
+      // } else {
+      //   continue;
+      // }
+
+      // if (resData.data.data.transaction.returnMessage !== "sending value to non payable contract") {
+      //   if (!resData.data.data.transaction.originalTransactionHash) {
+      //     const newobj = {
+      //       valueEgld: resData.data.data.transaction.value,
+      //       valueUSD: resData.data.data.transaction.value * 1e-20 * 50,
+      //       receiver: resData.data.data.transaction.receiver,
+      //       sender: resData.data.data.transaction.sender,
+      //       // error: "sending value to non payable contract",
+      //       hash: item.txHash,
+      //       originalSender: resData.data.data.transaction.originalSender,
+      //       originalTransactionHash: "not found",
+      //       nftName: "not found",
+      //     };
+      //     data.push(newobj);
+      //     continue;
+      //   }
+
+      //   const nftName =
+      //     (await scrape(resData.data.data.transaction.originalTransactionHash)) || "not found";
+
+      //   const newobj = {
+      //     valueEgld: resData.data.data.transaction.value,
+      //     valueUSD: resData.data.data.transaction.value * 1e-20 * 50,
+      //     receiver: resData.data.data.transaction.receiver,
+      //     sender: resData.data.data.transaction.sender,
+      //     hash: item.txHash,
+      //     originalSender: resData.data.data.transaction.originalSender,
+      //     originalTransactionHash: resData.data.data.transaction.originalTransactionHash,
+      //     nftName,
+      //   };
+      //   data.push(newobj);
+      //   continue;
+      // }
     }
     console.log("data____________", data);
-
     const ws = reader.utils.json_to_sheet(data);
-    reader.utils.book_append_sheet(file, ws, "Sheet30");
-    reader.writeFile(file, "./elrond.xlsx");
+    reader.utils.book_append_sheet(file, ws, "Sheet101");
+    reader.writeFile(file, "./newElrond.xlsx");
   } catch (err) {
     console.log(err.message);
   }
@@ -126,7 +215,6 @@ const scrape = async (hash) => {
       const name = $(el).children("div").children("span").text();
       if (name) {
         arr.push(name);
-        console.log(name);
       }
     });
     return arr[0];
