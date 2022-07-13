@@ -1,34 +1,9 @@
 const axios = require("axios");
-const axiosRetry = require("axios-retry");
 const reader = require("xlsx");
 const file = reader.readFile("./10_7_badTransactions.xlsx");
-const puppeteer = require("puppeteer");
-const cheerio = require("cheerio");
-// var BigNumber = require("big-number");
-const { ethers, BigNumber } = require("ethers");
-const {Base64} = require('js-base64');
-
-axiosRetry(axios, {
-  retries: 3, // number of retries
-  retryDelay: (retryCount) => {
-    console.log(`retry attempt: ${retryCount}`);
-    return retryCount * 2000; // time interval between retries
-  },
-  retryCondition: (error) => {
-    // if retry condition is not specified, by default idempotent requests are retried
-    return error.response.status === 503;
-  },
-});
+const { Base64 } = require("js-base64");
 
 const api1 = axios.create({
-  baseURL: "https://api.elrond.com",
-  headers: {
-    "Content-type": "application/json",
-    Accept: "application/json",
-  },
-});
-
-const api = axios.create({
   baseURL: "https://api.elrond.com",
   headers: {
     "Content-type": "application/json",
@@ -39,7 +14,7 @@ const api = axios.create({
 const getData = async () => {
   try {
     let res = await api1.get(
-      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=200&size=4100`
+      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=300&size=600`
     );
     console.log(res.data.length);
     await smartContractResults1(res.data);
@@ -48,6 +23,7 @@ const getData = async () => {
   }
 };
 
+
 const smartContractResults1 = async (dataArray) => {
   console.log(dataArray.length);
   try {
@@ -55,18 +31,10 @@ const smartContractResults1 = async (dataArray) => {
     for await (const item of dataArray) {
       const hashToCall = item.originalTxHash ? item.originalTxHash : item.txHash;
 
-      let existInData = false;
+      const existInData = data.filter((item) => item.mainHash === hashToCall);
 
-      for (let z = 0; z < data.length; z++) {
-        const hashInArray = data[z].mainHash;
-        if (hashInArray === hashToCall) {
-          console.log("exists!!!", hashToCall);
-          existInData = true;
-          break;
-        }
-      }
-
-      if (existInData) {
+      if (existInData[0]) {
+        console.log("exists!!!", existInData[0].mainHash);
         continue;
       }
 
@@ -83,28 +51,23 @@ const smartContractResults1 = async (dataArray) => {
         continue;
       }
       if (!resData.data.data.transaction.smartContractResults) {
-        console.log("there is no smartContractResults :",hashToCall);
+        console.log("there is no smartContractResults :", hashToCall);
         continue;
       }
 
+      const logs = resData.data.data.transaction.logs;
       const smartContractResults = resData.data.data.transaction.smartContractResults;
       const mainHashValue = resData.data.data.transaction.value;
 
+      const collection = logs.events[0].topics[0];
+      const collectionName = Base64.decode(collection);
+
       console.log(hashToCall);
- 
-      let isValidSmartContractResults = false;
 
-      for (let t = 0; t < smartContractResults.length; t++) {
-        if (Object.keys(smartContractResults[t]).indexOf("returnMessage") === 11) {
-          console.log("returnMessage:" + " " + smartContractResults[t].returnMessage + " " +  smartContractResults[t].hash);
-          isValidSmartContractResults = true;
-          break;
-        }
-      }
+      const isValidSmartContractResults = smartContractResults.find((el) => Object.keys(el).indexOf("returnMessage") === 11)
+      if (!isValidSmartContractResults)continue;
 
-      if (isValidSmartContractResults) {
         for (let i = 0; i < smartContractResults.length; i++) {
-         
           if (
             // smartContractResults[i].receiver ===
             // "erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8" &&
@@ -117,57 +80,52 @@ const smartContractResults1 = async (dataArray) => {
             const isAroyaltyHash = internalHashValue == tenPercentOfMainValue ? true : false;
 
             if (isAroyaltyHash) {
-              const nftName = (await scrape(hashToCall)) || "not found";
+              // const nftName = (await scrape(hashToCall)) || "not found";
 
               const newobj = {
-                royaltyValue: internalHashValue/1000000000000000000,
-                mainValue: mainHashValue/1000000000000000000,
+                royaltyValue: internalHashValue / 1000000000000000000,
+                mainValue: mainHashValue / 1000000000000000000,
                 internalHash: smartContractResults[i].hash,
                 mainHash: hashToCall,
-                nftName,
+                collectionName: collectionName,
               };
               data.push(newobj);
               console.log(newobj);
             }
           }
         }
-      }
     }
     console.log("data____________", data);
-    const ws = reader.utils.json_to_sheet(data);
-    reader.utils.book_append_sheet(file, ws, "Sheet101");
-    reader.writeFile(file, "./10_7_badTransactions.xlsx");
+    // const ws = reader.utils.json_to_sheet(data);
+    // reader.utils.book_append_sheet(file, ws, "Sheet101");
+    // reader.writeFile(file, "./10_7_badTransactions.xlsx");
   } catch (err) {
     console.log(err.message);
   }
 };
+getData();
 
-const scrape = async (hash) => {
-  try {``
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
-    await page.goto(`https://explorer.elrond.com/transactions/${hash}`);
-    await page.waitForSelector(".tab-content");
-    const newwholePage = await page.evaluate(
-      () => document.querySelector(".tab-content").innerHTML
-    );
-    const $ = await cheerio.load(newwholePage, null, false);
-    const listItems = $("a");
-    const arr = [];
-    listItems.each(function (idx, el) {
-      const name = $(el).children("div").children("span").text();
-      if (name) {
-        arr.push(name);
-      }
-    });
-    return arr[0];
-  } catch (err) {
-    return;
-  }
-};
-
-(async () => {
-  const res = await getData();
-})();
-
-
+// const scrape = async (hash) => {
+//   try {
+//     ``;
+//     const browser = await puppeteer.launch();
+//     const page = await browser.newPage();
+//     await page.goto(`https://explorer.elrond.com/transactions/${hash}`);
+//     await page.waitForSelector(".tab-content");
+//     const newwholePage = await page.evaluate(
+//       () => document.querySelector(".tab-content").innerHTML
+//     );
+//     const $ = await cheerio.load(newwholePage, null, false);
+//     const listItems = $("a");
+//     const arr = [];
+//     listItems.each(function (idx, el) {
+//       const name = $(el).children("div").children("span").text();
+//       if (name) {
+//         arr.push(name);
+//       }
+//     });
+//     return arr[0];
+//   } catch (err) {
+//     return;
+//   }
+// };
