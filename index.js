@@ -6,6 +6,7 @@ const puppeteer = require("puppeteer");
 const cheerio = require("cheerio");
 // var BigNumber = require("big-number");
 const { ethers, BigNumber } = require("ethers");
+const {Base64} = require('js-base64');
 
 axiosRetry(axios, {
   retries: 3, // number of retries
@@ -38,7 +39,7 @@ const api = axios.create({
 const getData = async () => {
   try {
     let res = await api1.get(
-      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=0&size=4100`
+      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=200&size=4100`
     );
     console.log(res.data.length);
     await smartContractResults1(res.data);
@@ -47,14 +48,6 @@ const getData = async () => {
   }
 };
 
-/**
- * Promise.allSets(dataArray.map(async (item) => {
- *    return axios
- * }))
- * @param {
- *
- * } dataArray
- */
 const smartContractResults1 = async (dataArray) => {
   console.log(dataArray.length);
   try {
