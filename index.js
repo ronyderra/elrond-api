@@ -1,6 +1,6 @@
 const axios = require("axios");
 const reader = require("xlsx");
-const file = reader.readFile("./10_7_badTransactions.xlsx");
+const file = reader.readFile("./18_7_goodTransactions.xlsx");
 const { Base64 } = require("js-base64");
 
 const api1 = axios.create({
@@ -14,7 +14,7 @@ const api1 = axios.create({
 const getData = async () => {
   try {
     let res = await api1.get(
-      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=300&size=600`
+      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=0&size=6000`
     );
     console.log(res.data.length);
     await smartContractResults1(res.data);
@@ -23,11 +23,29 @@ const getData = async () => {
   }
 };
 
+const apiCall = async (hash) => {
+  let i = 0;
+  while (i < 20) {
+    try {
+      let res = await axios.get(`https://api.elrond.com/transaction/${hash}?withResults=true`);
+      if (res.data) {
+        console.log(i);
+        return res;
+      }
+      i++;
+    } catch {
+      i++;
+      continue;
+    }
+  }
+};
 
 const smartContractResults1 = async (dataArray) => {
   console.log(dataArray.length);
   try {
     let data = [];
+    let failedData = [];
+    let royal = 0
     for await (const item of dataArray) {
       const hashToCall = item.originalTxHash ? item.originalTxHash : item.txHash;
 
@@ -38,12 +56,12 @@ const smartContractResults1 = async (dataArray) => {
         continue;
       }
 
-      let resData = await axios
-        .get(`https://api.elrond.com/transaction/${hashToCall}?withResults=true`)
-        .catch((e) => "got failed");
+      let resData = await apiCall(hashToCall);
+      // console.log(resData)
 
       if (resData === "got failed") {
         console.log("failed", hashToCall);
+        failedData.push(hashToCall);
         continue;
       }
       if (resData.data.data.transaction.value == 0) {
@@ -64,41 +82,46 @@ const smartContractResults1 = async (dataArray) => {
 
       console.log(hashToCall);
 
-      const isValidSmartContractResults = smartContractResults.find((el) => Object.keys(el).indexOf("returnMessage") === 11)
-      if (!isValidSmartContractResults)continue;
+      const isValidSmartContractResults = smartContractResults.find(
+        (el) => Object.keys(el).indexOf("returnMessage") === 11 && el.returnMessage === "sending value to non payable contract"
+      );
+      if (isValidSmartContractResults) continue;
 
-        for (let i = 0; i < smartContractResults.length; i++) {
-          if (
-            // smartContractResults[i].receiver ===
-            // "erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8" &&
-            smartContractResults[i].returnMessage === "sending value to non payable contract"
-          ) {
-            const internalHashValue = smartContractResults[i].value;
+      for (let i = 0; i < smartContractResults.length; i++) {
+        if (
+          smartContractResults[i].receiver ===
+          "erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8" &&
+          smartContractResults[i].returnMessage !== "sending value to non payable contract"
+        ) {
+          const internalHashValue = smartContractResults[i].value;
 
-            const tenPercentOfMainValue = (mainHashValue / 100) * 10;
+          const tenPercentOfMainValue = (mainHashValue / 100) * 10;
 
-            const isAroyaltyHash = internalHashValue == tenPercentOfMainValue ? true : false;
+          const isAroyaltyHash = internalHashValue == tenPercentOfMainValue ? true : false;
 
-            if (isAroyaltyHash) {
-              // const nftName = (await scrape(hashToCall)) || "not found";
+          if (isAroyaltyHash) {
+            // const nftName = (await scrape(hashToCall)) || "not found";
 
-              const newobj = {
-                royaltyValue: internalHashValue / 1000000000000000000,
-                mainValue: mainHashValue / 1000000000000000000,
-                internalHash: smartContractResults[i].hash,
-                mainHash: hashToCall,
-                collectionName: collectionName,
-              };
-              data.push(newobj);
-              console.log(newobj);
-            }
+            const newobj = {
+              royaltyValue: internalHashValue / 1000000000000000000,
+              mainValue: mainHashValue / 1000000000000000000,
+              internalHash: smartContractResults[i].hash,
+              mainHash: hashToCall,
+              collectionName: collectionName,
+            };
+            royal = royal + (internalHashValue / 1000000000000000000);
+            data.push(newobj);
+            console.log(newobj);
           }
         }
+      }
     }
     console.log("data____________", data);
-    // const ws = reader.utils.json_to_sheet(data);
-    // reader.utils.book_append_sheet(file, ws, "Sheet101");
-    // reader.writeFile(file, "./10_7_badTransactions.xlsx");
+    console.log(failedData.length);
+    console.log(royal)
+    const ws = reader.utils.json_to_sheet(data);
+    reader.utils.book_append_sheet(file, ws, "Sheet101");
+    reader.writeFile(file, "./18_7_goodTransactions.xlsx");
   } catch (err) {
     console.log(err.message);
   }
