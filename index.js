@@ -23,7 +23,7 @@ console.log("got here")
     const file = reader.readFile("./" + fileName);
 
     let res = await api1.get(
-      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=50&size=100`
+      `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=0&size=10000`
     );
     console.log(res.data.length);
     await smartContractResults1(res.data, file, fileName);
@@ -137,8 +137,8 @@ const smartContractResults1 = async (dataArray, aFile, fileName) => {
   }
 };
 
-cron.schedule("* * * * *",async () => {
-  console.log("running a task every minute");
+cron.schedule("0 0 0 * * *",async () => {
+  console.log("running a task on midnight");
   const fileName =Date(Date.now())
  await openFile(fileName + ".xlsx")
 
