@@ -18,10 +18,9 @@ const api1 = axios.create({
 
 const getData = async (fileName) => {
   try {
-
-console.log("got here")
+    console.log("got here");
     const file = reader.readFile("./" + fileName);
-
+    console.log(fileName);
     let res = await api1.get(
       `/accounts/erd1qqqqqqqqqqqqqpgq3y98dyjdp72lwzvd35yt4f9ua2a3n70v0drsfycvu8/transfers?from=0&size=10000`
     );
@@ -37,6 +36,9 @@ const smartContractResults1 = async (dataArray, aFile, fileName) => {
   try {
     let data = [];
     let royalties = 0;
+    let hoki = 0;
+    let inno = 0;
+    let hogh = 0;
     let index = 0;
     for await (const item of dataArray) {
       index++;
@@ -65,10 +67,6 @@ const smartContractResults1 = async (dataArray, aFile, fileName) => {
       const smartContractResults = resData.data.data.transaction.smartContractResults;
       const mainHashValue = resData.data.data.transaction.value;
 
-      const collection = logs.events[0].topics[0];
-      const collectionName = Base64.decode(collection);
-      console.log(collectionName);
-
       console.log("####hashToCall####:", hashToCall);
 
       const transactionFailed = smartContractResults.find(
@@ -94,14 +92,33 @@ const smartContractResults1 = async (dataArray, aFile, fileName) => {
           const isAroyaltyHash = internalHashValue == tenPercentOfMainValue ? true : false;
 
           if (isAroyaltyHash) {
+            const esdtNftIdentifier = logs.events.filter((i) => i.identifier === "ESDTNFTTransfer");
+            console.log(hashToCall);
+            const collectionName = Base64.decode(esdtNftIdentifier[0].topics[0]);
+            console.log(collectionName);
+
+            const bigNum = 1000000000000000000;
             const newobj = {
-              royaltyValue: internalHashValue / 1000000000000000000,
-              mainValue: mainHashValue / 1000000000000000000,
+              royaltyValue: internalHashValue / bigNum,
+              mainValue: mainHashValue / bigNum,
               internalHash: smartContractResults[i].hash,
               mainHash: hashToCall,
               collectionName: collectionName,
             };
-            royalties += internalHashValue / 1000000000000000000;
+            royalties += internalHashValue / bigNum;
+            switch (true) {
+              case collectionName.includes("HOKI"):
+                hoki += internalHashValue / bigNum;
+                break;
+              case collectionName.includes("HOGHOMIES"):
+                hogh += internalHashValue / bigNum;
+                break;
+              case collectionName.includes("INNOVATOR"):
+                inno += internalHashValue / bigNum;
+                break;
+              default:
+              // code block
+            }
             data.push(newobj);
             console.log(newobj);
           }
@@ -120,7 +137,16 @@ const smartContractResults1 = async (dataArray, aFile, fileName) => {
         GROUP_ID,
         fs.readFileSync("./" + fileName),
         {
-          caption: "total royalyies:" + royalties + " EGLD",
+          caption:
+            "total royalyies:" +
+            royalties.toFixed(3) +
+            " EGLD" +
+            ", \nHOKI: " +
+            hoki.toFixed(3) +
+            ", \nHOGHOMIES: " +
+            hogh.toFixed(3) +
+            ", \nINNOVATOR: " +
+            inno.toFixed(3),
         },
         {
           filename: fileName,
@@ -131,31 +157,32 @@ const smartContractResults1 = async (dataArray, aFile, fileName) => {
       .then(() => {
         console.log("File has been sent");
       });
-
   } catch (err) {
     console.log(err.message);
   }
 };
 
-cron.schedule("0 0 0 * * *",async () => {
-  console.log("running a task on midnight");
-  const fileName =Date(Date.now())
- await openFile(fileName + ".xlsx")
+cron.schedule("0 1 * * *", async () => {
+    console.log("running a task on midnight");
+    const fileName = Date(Date.now());
+    await openFile(fileName + ".xlsx");
 
+    setTimeout(() => {
+      getData(fileName.toString() + ".xlsx");
+    }, 5000);
+  },
+  {
+    scheduled: true,
+    timezone: "Asia/Jerusalem",
+  }
+);
 
- setTimeout( () =>{
-   getData(fileName.toString() + ".xlsx");
-}, 5000);
- 
-});
-
-const openFile = (fileName) =>{
+const openFile = (fileName) => {
   fs.open(fileName.toString(), "w", function (err, file) {
     if (err) throw err;
     console.log("Saved!");
   });
-}
-
+};
 
 const transactionCall = async (hash) => {
   let i = 0;
